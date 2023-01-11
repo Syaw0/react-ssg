@@ -1,4 +1,4 @@
-import fs, { readdirSync, readFileSync } from "fs";
+import fs, { readdirSync, readFileSync, writeFileSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import babel from "@babel/core";
@@ -81,7 +81,7 @@ let createHtml = (com, script) => {
       <meta charset="UTF-8" />
       <meta http-equiv="X-UA-Compatible" content="IE=edge" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <script async scr=${script}></script>
+      <script async src="${script}"></script>
       <title>Document</title>
     </head>
     <body>
@@ -146,7 +146,7 @@ let pack = async(entry) => {
         entry: entry.url,
         output: {
           filename: `${entry.name}.bundle.js`,
-          path: __dirname + `/dist/final/${entry.name}/`,
+          path: __dirname + `/dist/final/`,
         },
         mode: "production",
         module: {
@@ -179,16 +179,63 @@ let pack = async(entry) => {
 
 
 
+
+
+const baseServer = `
+import express from "express";
+import { readFileSync } from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const app = express();
+app.use(express.static("dist/final"));
+
+//next
+
+app.listen(3000);
+`
+
+const makeEndPoint = (url,path) => {
+  return (`\n
+  app.get('${url}',(req,res)=>{
+    const file = readFileSync("${path}", {
+      encoding: "utf-8",
+    });
+  
+    res.send(file);
+  })
+  \n
+  //next
+  `)
+}
+
+
+fs.mkdirSync(__dirname+"/dist/final")
+fs.writeFileSync(__dirname+"/dist/server.js",baseServer)
+
 entry.forEach((r)=>{
   pack(r).then(re=>{
-    console.log(re)
       let markup;
   markup = createHtml(r.com, `./${r.name}.bundle.js`);
-  fs.writeFileSync(__dirname + `/dist/final/${r.name}/index.html`, markup);
+  fs.writeFileSync(__dirname + `/dist/final/index-${r.name}.html`, markup);
+
+    let server = fs.readFileSync(__dirname+"/dist/server.js",{encoding:"utf-8"})
+
+  if(r.name == 'main'){
+    let x = makeEndPoint('/',__dirname + `/dist/final/index-${r.name}.html`)
+    server = server.replace('//next',makeEndPoint('/',__dirname + `/dist/final/index-${r.name}.html`))
+    fs.writeFileSync(__dirname+'/dist/server.js',server)
+  }else{
+    server = server.replace('//next',makeEndPoint(r.name.split('_').join('/'),__dirname + `/dist/final/index-${r.name}.html`))
+    fs.writeFileSync(__dirname+'/dist/server.js',server)
+  }
   }).catch(er=>{
     console.log(er)
   })
 })
+
+
+
 
 // const bundle = async () => {
 //   console.log(entry)
